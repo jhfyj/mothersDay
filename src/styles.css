@@ -1,0 +1,468 @@
+*, *::before, *::after { box-sizing: border-box; }
+
+html, body, #root {
+  margin: 0;
+  padding: 0;
+  height: 100vh;
+  height: 100dvh; /* dynamic viewport — adapts to mobile address bar; falls back to vh */
+  overscroll-behavior: none;
+}
+
+body {
+  font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  color: #2a1f3d;
+  -webkit-tap-highlight-color: transparent;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+.app {
+  position: relative; /* positioning context for .photos-layer */
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 12px;
+  gap: 36px;
+}
+
+/*
+ * The board is a SHAPE_COLS × SHAPE_ROWS bounding rectangle. The clip-path
+ * carves a heart silhouette out of it so spawning tiles only become visible as
+ * they enter the heart from above. The polygon below is hand-traced from the
+ * mask in src/game/shape.ts — if you change the mask, update this polygon.
+ * Coordinates are multiples of 100/7% (col edges) and 100/6% (row edges).
+ */
+.board {
+  position: relative;
+  z-index: 1; /* sits above iced photos (z=0), below revealing/collected (z=100) */
+  width: min(96vw, calc((100vh - 120px) * var(--cols) / var(--rows)));
+  width: min(96vw, calc((100dvh - 120px) * var(--cols) / var(--rows))); /* dvh adapts to mobile chrome; vh above is fallback */
+  aspect-ratio: var(--cols) / var(--rows);
+  clip-path: polygon(
+    14.286% 0%,    42.857% 0%,
+    42.857% 16.667%, 57.143% 16.667%,
+    57.143% 0%,    85.714% 0%,
+    85.714% 16.667%, 100% 16.667%,
+    100% 50%,      85.714% 50%,
+    85.714% 66.667%, 71.429% 66.667%,
+    71.429% 83.333%, 57.143% 83.333%,
+    57.143% 100%,  42.857% 100%,
+    42.857% 83.333%, 28.571% 83.333%,
+    28.571% 66.667%, 14.286% 66.667%,
+    14.286% 50%,   0% 50%,
+    0% 16.667%,    14.286% 16.667%
+  );
+}
+
+.cell-bg, .ice, .tile {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: calc(100% / var(--cols));
+  height: calc(100% / var(--rows));
+  padding: 3px;
+  transform: translate(var(--x), var(--y));
+}
+
+.cell-bg, .ice {
+  pointer-events: none;
+}
+
+.cell-bg::before {
+  content: '';
+  display: block;
+  width: 100%;
+  height: 100%;
+  background: #efefef;
+  border-radius: 14px;
+}
+
+/*
+ * Ice cells overlay a photo region. Translucent white + backdrop blur means the
+ * photo behind shows dimly. When the cell's animal is matched, the .broken
+ * class transitions opacity to 0, revealing the photo clearly.
+ */
+.ice::before {
+  content: '';
+  display: block;
+  width: 100%;
+  height: 100%;
+  background: rgba(255, 255, 255, 0.72);
+  backdrop-filter: blur(3px);
+  -webkit-backdrop-filter: blur(3px);
+  border-radius: 14px;
+  transition: opacity 240ms ease;
+}
+
+.ice.broken::before {
+  opacity: 0;
+}
+
+.tile {
+  transition:
+    transform 260ms cubic-bezier(0.2, 0.8, 0.2, 1),
+    opacity 180ms ease;
+  touch-action: none;
+  cursor: pointer;
+  will-change: transform;
+}
+
+.tile.exiting {
+  opacity: 0;
+  transform: translate(var(--x), var(--y)) scale(0.55);
+  pointer-events: none;
+}
+
+/*
+ * Shuffle: tiles shrink + spin in place, kinds get reassigned mid-pause, then
+ * tiles return to normal. Longer transition than a regular swap so the spin
+ * reads clearly.
+ */
+.tile.shuffling {
+  opacity: 0.55;
+  transform: translate(var(--x), var(--y)) scale(0.35) rotate(540deg);
+  transition:
+    transform 440ms cubic-bezier(0.4, 0, 0.6, 1),
+    opacity 200ms ease;
+  pointer-events: none;
+}
+
+.cell {
+  width: 100%;
+  height: 100%;
+  border-radius: 14px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 140ms ease, box-shadow 140ms ease;
+}
+
+.cell.selected {
+  background: #d6d6d6;
+  box-shadow:
+    inset 0 0 0 2px rgba(0, 0, 0, 0.08),
+    0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+.cell img {
+  width: 92%;
+  height: 92%;
+  pointer-events: none;
+  -webkit-user-drag: none;
+}
+
+/*
+ * Collection strip below the heart. Each slot's aspect-ratio comes from its
+ * photo region (1×2 portraits stay portrait, 2×1 landscapes stay landscape, 2×2
+ * stays square). The strip itself is fixed-height; slots size by that height.
+ */
+.strip {
+  --slot-height: 64px;
+  position: relative;
+  z-index: 1;
+  height: var(--slot-height);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  max-width: 96vw;
+  padding: 0 4px;
+}
+
+/*
+ * Slot corner radii are kept in CSS variables so the collected-photo radius
+ * (further down) can reference the same numbers. Change here = both update.
+ */
+:root {
+  --slot-radius-square: 12px;
+  --slot-radius-portrait: 8px;
+}
+
+.strip-slot {
+  height: 100%;
+  /* width derived from inline aspect-ratio */
+  border-radius: var(--slot-radius-square);
+  background: #f3f3f3;
+  border: 1px dashed #d0d0d0;
+}
+
+.strip-slot.strip-slot--portrait {
+  border-radius: var(--slot-radius-portrait);
+}
+
+/*
+ * Photos layer: absolute overlay across the whole .app. Each <Photo> is
+ * absolute-positioned within it; left/top/width/height transition between
+ * three visual states (over the board, grown to center, in a strip slot).
+ */
+.photos-layer {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+}
+
+.photo {
+  position: absolute;
+  background-size: cover;
+  background-position: center;
+  background-repeat: no-repeat;
+  border-radius: 12px;
+  transition:
+    left 600ms cubic-bezier(0.2, 0.8, 0.2, 1),
+    top 600ms cubic-bezier(0.2, 0.8, 0.2, 1),
+    width 600ms cubic-bezier(0.2, 0.8, 0.2, 1),
+    height 600ms cubic-bezier(0.2, 0.8, 0.2, 1),
+    opacity 280ms ease,
+    border-radius 500ms cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+.photo.photo--revealing-grow,
+.photo.photo--revealing-hold,
+.photo.photo--revealing-shrink,
+.photo.photo--collected,
+.photo.photo--expanded {
+  box-shadow: 0 6px 24px rgba(0, 0, 0, 0.18);
+}
+
+.photo.photo--portrait {
+  border-radius: 8px;
+}
+
+/*
+ * In the collection (and while settling into it), the photo's radius matches
+ * its strip-slot exactly so the slot's shape effectively clips the photo —
+ * no visible mismatch between photo edge and slot edge. Both values come from
+ * the same --slot-radius-* variables defined above.
+ */
+.photo.photo--collected,
+.photo.photo--revealing-shrink {
+  border-radius: var(--slot-radius-square);
+}
+
+.photo.photo--collected.photo--portrait,
+.photo.photo--revealing-shrink.photo--portrait {
+  border-radius: var(--slot-radius-portrait);
+}
+
+/* Expanded keeps its own smaller radius for the polaroid-card look. */
+.photo.photo--expanded {
+  border-radius: 12px;
+}
+
+.photo.photo--expanded.photo--portrait {
+  border-radius: 8px;
+}
+
+/* Only collected/expanded photos accept taps; the others are display-only. */
+.photo.photo--collected,
+.photo.photo--expanded {
+  pointer-events: auto;
+  cursor: pointer;
+  touch-action: none;
+}
+
+/*
+ * Full-screen backdrop shown only while a photo is expanded. Sits below the
+ * expanded photo (z=99 < 100) so taps on the photo go to the photo, taps
+ * anywhere else go here and dismiss.
+ */
+.photo-backdrop {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  z-index: 99;
+  pointer-events: auto;
+  touch-action: none;
+  background: rgba(0, 0, 0, 0.25);
+  border-radius: 0px;
+}
+
+/* === Win modal ============================================================ */
+
+.win-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 200;
+  background: rgba(20, 20, 20, 0.78);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  pointer-events: auto;
+  touch-action: none;
+  animation: win-fade 280ms ease both;
+}
+
+.win-modal {
+  width: 100%;
+  max-width: 340px;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  animation: win-rise 320ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
+}
+
+.win-card {
+  /* Slightly more saturated peach so the pill inside reads as the lighter element. */
+  background: linear-gradient(180deg, #fff5eb 0%, #f1e6d9 100%);
+  border-radius: 20px;
+  padding: 32px 28px;
+  box-shadow:
+    0 12px 32px rgba(0, 0, 0, 0.3),
+    inset 0 0 0 1px rgba(255, 180, 140, 0.5);
+}
+
+.win-card--top {
+  position: relative;
+  padding: 36px 32px 32px;
+}
+
+.win-card--top::before {
+  content: '';
+  position: absolute;
+  inset: 8px;
+  border: 2px dashed rgba(255, 110, 130, 0.55);
+  border-radius: 14px;
+  pointer-events: none;
+}
+
+.hearts-row {
+  position: relative;
+  display: flex;
+  justify-content: center;
+  gap: 18px;
+  margin-bottom: 22px;
+}
+
+.heart {
+  width: 44px;
+  height: 44px;
+  filter: drop-shadow(0 2px 4px rgba(255, 45, 45, 0.25));
+  opacity: 0;
+  animation-duration: 650ms;
+  animation-timing-function: cubic-bezier(0.34, 1.7, 0.64, 1);
+  animation-fill-mode: both;
+}
+
+/*
+ * Per-heart keyframes so each lands at its own resting tilt. Drop in from
+ * above, overshoot down + rotate the wrong way, then settle at the resting
+ * angle. Delays cascade left → right.
+ */
+.heart:nth-child(1) {
+  animation-name: heart-land-1;
+  animation-delay: 250ms;
+}
+.heart:nth-child(2) {
+  animation-name: heart-land-2;
+  animation-delay: 500ms;
+}
+.heart:nth-child(3) {
+  animation-name: heart-land-3;
+  animation-delay: 750ms;
+}
+
+@keyframes heart-land-1 {
+  0%   { opacity: 0; transform: translateY(-50px) rotate(-25deg) scale(0.5); }
+  60%  { opacity: 1; transform: translateY(8px)   rotate(4deg)   scale(1.15); }
+  80%  {             transform: translateY(-2px)  rotate(-12deg) scale(0.97); }
+  100% { opacity: 1; transform: translateY(0)     rotate(-8deg)  scale(1); }
+}
+@keyframes heart-land-2 {
+  0%   { opacity: 0; transform: translateY(-50px) rotate(-15deg) scale(0.5); }
+  60%  { opacity: 1; transform: translateY(8px)   rotate(12deg)  scale(1.15); }
+  80%  {             transform: translateY(-4px)  rotate(-2deg)  scale(0.97); }
+  100% { opacity: 1; transform: translateY(-2px)  rotate(2deg)   scale(1); }
+}
+@keyframes heart-land-3 {
+  0%   { opacity: 0; transform: translateY(-50px) rotate(-10deg) scale(0.5); }
+  60%  { opacity: 1; transform: translateY(8px)   rotate(18deg)  scale(1.15); }
+  80%  {             transform: translateY(-2px)  rotate(2deg)   scale(0.97); }
+  100% { opacity: 1; transform: translateY(0)     rotate(7deg)   scale(1); }
+}
+
+.win-title {
+  margin: 0 0 14px;
+  font-family: 'Ma Shan Zheng', 'Kaiti SC', 'STKaiti', system-ui, sans-serif;
+  font-size: 40px;
+  font-weight: 400;
+  letter-spacing: 2px;
+  text-align: center;
+  color: #c0392b;
+  text-shadow: 0 2px 0 rgba(255, 255, 255, 0.6);
+}
+
+.win-subtitle {
+  margin: 0;
+  font-family: 'Ma Shan Zheng', 'Kaiti SC', 'STKaiti', system-ui, sans-serif;
+  font-size: 19px;
+  font-weight: 400;
+  line-height: 1.7;
+  letter-spacing: 1px;
+  text-align: center;
+  color: #4a3a30;
+}
+
+.rank-title {
+  margin: 0 0 14px;
+  font-family: 'Ma Shan Zheng', 'Kaiti SC', 'STKaiti', system-ui, sans-serif;
+  font-size: 24px;
+  font-weight: 400;
+  letter-spacing: 1px;
+  text-align: center;
+  color: #1c1c1c;
+}
+
+.rank-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  /* Lighter than the surrounding card — same warm family, near-white. */
+  background: #fdf6ea;
+  border-radius: 10px;
+  padding: 12px 16px;
+}
+
+.rank-trophy {
+  color: #4a4a4a;
+  flex-shrink: 0;
+}
+
+.rank-avatar {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  object-fit: cover;
+  flex-shrink: 0;
+}
+
+.rank-name {
+  font-size: 16px;
+  font-weight: 500;
+  color: #1c1c1c;
+}
+
+.rank-score {
+  margin-left: auto;
+  font-size: 16px;
+  font-style: italic;
+  color: #888;
+}
+
+@keyframes win-fade {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes win-rise {
+  from { opacity: 0; transform: translateY(20px); }
+  to { opacity: 1; transform: translateY(0); }
+}
