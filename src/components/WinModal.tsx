@@ -1,7 +1,9 @@
 import { useEffect } from 'react';
 import confetti from 'canvas-confetti';
-import momPhoto from '../assets/photos/photo1.jpg';
+import { PHOTO_BASE_URL } from '../game/photos';
 import { Trophy } from '../assets/icons/Trophy';
+
+const momPhoto = `${PHOTO_BASE_URL}/photo1.jpg`;
 
 const CONFETTI_COLORS = [
   '#ff6b9d',

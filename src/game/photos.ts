@@ -1,8 +1,7 @@
-import p1 from '../assets/photos/photo1.jpg';
-import p2 from '../assets/photos/photo2.jpg';
-import p3 from '../assets/photos/photo3.jpg';
-import p4 from '../assets/photos/photo4.jpg';
-import p5 from '../assets/photos/photo5.jpg';
+// Photos hosted directly from the GitHub repo. Change the branch in PHOTO_BASE_URL
+// if you ever switch from main, or swap to a CDN later.
+export const PHOTO_BASE_URL =
+  'https://raw.githubusercontent.com/jhfyj/mothersDay/main/src/assets/photos';
 
 export type PhotoRegion = {
   id: string;
@@ -14,11 +13,11 @@ export type PhotoRegion = {
 };
 
 export const PHOTO_REGIONS: ReadonlyArray<PhotoRegion> = [
-  { id: 'p1', src: p1, topRow: 0, leftCol: 1, width: 2, height: 2 },
-  { id: 'p2', src: p4, topRow: 0, leftCol: 4, width: 2, height: 2 },
-  { id: 'p3', src: p3, topRow: 1, leftCol: 0, width: 1, height: 2 },
-  { id: 'p4', src: p5, topRow: 1, leftCol: 6, width: 1, height: 2 },
-  { id: 'p5', src: p2, topRow: 3, leftCol: 3, width: 2, height: 2 },
+  { id: 'p1', src: `${PHOTO_BASE_URL}/photo1.jpg`, topRow: 0, leftCol: 1, width: 2, height: 2 },
+  { id: 'p2', src: `${PHOTO_BASE_URL}/photo4.jpg`, topRow: 0, leftCol: 4, width: 2, height: 2 },
+  { id: 'p3', src: `${PHOTO_BASE_URL}/photo3.jpg`, topRow: 1, leftCol: 0, width: 1, height: 2 },
+  { id: 'p4', src: `${PHOTO_BASE_URL}/photo5.jpg`, topRow: 1, leftCol: 6, width: 1, height: 2 },
+  { id: 'p5', src: `${PHOTO_BASE_URL}/photo2.jpg`, topRow: 3, leftCol: 3, width: 2, height: 2 },
 ];
 
 export const cellKey = (row: number, col: number) => `${row},${col}`;
