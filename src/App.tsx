@@ -25,6 +25,54 @@ export default function App() {
   const [iceState, setIceState] = useState<Set<string>>(initialIceKeys);
   const [photoStates, setPhotoStates] = useState<Record<string, PhotoState>>(initialPhotoStates);
   const [hasWon, setHasWon] = useState(false);
+  // Bumping gameKey forces <Board> to remount with fresh cells.
+  const [gameKey, setGameKey] = useState(0);
+
+  const handleRestart = useCallback(() => {
+    setIceState(initialIceKeys());
+    setPhotoStates(initialPhotoStates());
+    setHasWon(false);
+    setGameKey((k) => k + 1);
+  }, []);
+
+  const handleDownloadPhotos = useCallback(async () => {
+    // Fetch all 5 photos as Files. raw.githubusercontent.com is CORS-open
+    // (Access-Control-Allow-Origin: *) so blob() works.
+    const files = await Promise.all(
+      PHOTO_REGIONS.map(async (r) => {
+        const res = await fetch(r.src);
+        const blob = await res.blob();
+        return new File([blob], `mom-${r.id}.jpg`, { type: blob.type || 'image/jpeg' });
+      }),
+    );
+
+    // Preferred: system share sheet with all 5 files (iOS "Save to Photos",
+    // Android "Save Images" — single user confirmation for all 5).
+    if (navigator.canShare?.({ files }) && navigator.share) {
+      try {
+        await navigator.share({ files, title: '母亲节照片' });
+        return;
+      } catch (err) {
+        // User cancelled — don't fall back, they explicitly dismissed.
+        if ((err as Error)?.name === 'AbortError') return;
+        // Otherwise fall through to download fallback.
+      }
+    }
+
+    // Fallback: trigger 5 separate downloads with small spacing so the browser
+    // doesn't treat them as popup spam.
+    for (const file of files) {
+      const url = URL.createObjectURL(file);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = file.name;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+      await new Promise((r) => setTimeout(r, 200));
+    }
+  }, []);
 
   const handleMatchedCells = useCallback(
     (cells: Array<{ row: number; col: number }>) => {
@@ -99,7 +147,12 @@ export default function App() {
 
   return (
     <div className="app" ref={appRef}>
-      <Board boardElRef={boardRef} iceState={iceState} onMatchedCells={handleMatchedCells} />
+      <Board
+        key={gameKey}
+        boardElRef={boardRef}
+        iceState={iceState}
+        onMatchedCells={handleMatchedCells}
+      />
       <CollectionStrip ref={stripRef} />
       <PhotosLayer
         appRef={appRef}
@@ -109,7 +162,7 @@ export default function App() {
         onPhotoTap={handlePhotoTap}
         onBackdropTap={handleBackdropTap}
       />
-      {hasWon && <WinModal />}
+      {hasWon && <WinModal onRestart={handleRestart} onDownload={handleDownloadPhotos} />}
     </div>
   );
 }

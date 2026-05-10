@@ -14,7 +14,12 @@ const CONFETTI_COLORS = [
   '#FF2D2D',
 ];
 
-export function WinModal() {
+type Props = {
+  onRestart: () => void;
+  onDownload: () => void;
+};
+
+export function WinModal({ onRestart, onDownload }: Props) {
   useEffect(() => {
     // Center burst.
     confetti({
@@ -59,6 +64,22 @@ export function WinModal() {
           <p className="win-subtitle">
             祝妈天天开心，身体健康，开心消消乐一次通关！
           </p>
+          <div className="win-actions">
+            <button
+              type="button"
+              className="win-button win-button--primary"
+              onClick={onRestart}
+            >
+              再来一遍
+            </button>
+            <button
+              type="button"
+              className="win-button win-button--secondary"
+              onClick={onDownload}
+            >
+              下载图片
+            </button>
+          </div>
         </section>
 
         <section className="win-card">

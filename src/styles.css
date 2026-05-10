@@ -312,7 +312,7 @@ body {
 
 .win-card {
   /* Slightly more saturated peach so the pill inside reads as the lighter element. */
-  background: linear-gradient(180deg, #fff5eb 0%, #f1e6d9 100%);
+  background: linear-gradient(180deg, #ffffff 0%, #eeedeb 100%);
   border-radius: 20px;
   padding: 32px 28px;
   box-shadow:
@@ -426,9 +426,12 @@ body {
   align-items: center;
   gap: 8px;
   /* Lighter than the surrounding card — same warm family, near-white. */
-  background: #fdf6ea;
+  background: #ffffff;
   border-radius: 10px;
   padding: 12px 16px;
+  box-shadow:
+    0 2px 6px rgba(120, 70, 30, 0.12),
+    0 1px 2px rgba(120, 70, 30, 0.08);
 }
 
 .rank-trophy {
@@ -455,6 +458,44 @@ body {
   font-size: 16px;
   font-style: italic;
   color: #888;
+}
+
+.win-actions {
+  display: flex;
+  gap: 10px;
+  margin-top: 22px;
+}
+
+.win-button {
+  flex: 1;
+  font-family: 'Ma Shan Zheng', 'Kaiti SC', 'STKaiti', system-ui, sans-serif;
+  font-size: 18px;
+  font-weight: 400;
+  letter-spacing: 1px;
+  border-radius: 8px;
+  padding: 12px 16px;
+  cursor: pointer;
+  touch-action: manipulation;
+  transition: transform 120ms ease, background-color 140ms ease;
+}
+
+.win-button:active {
+  transform: scale(0.97);
+}
+
+/* Filled red — same #FF2D2D as the heart SVG and the hearts row. */
+.win-button--primary {
+  background: #eb4646;
+  color: #ffffff;
+  border: none;
+  box-shadow: 0 3px 8px rgba(255, 45, 45, 0.32);
+}
+
+/* Stroke-only red. Same red as primary, transparent fill. */
+.win-button--secondary {
+  background: transparent;
+  color: #eb4646;
+  border: 1px solid #eb4646;
 }
 
 @keyframes win-fade {
